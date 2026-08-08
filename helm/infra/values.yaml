@@ -1,0 +1,40 @@
+imageRegistry: registry.cn-hangzhou.aliyuncs.com/jaign-mirror/default
+
+postgresql:
+  enabled: true
+  image:
+    repository: postgres-16-alpine
+    tag: ""
+    pullPolicy: IfNotPresent
+  auth:
+    postgresPassword: "postgres-dev-pw-2026"
+    username: newapi
+    password: "newapi-dev-pw-2026"
+    database: new-api
+  storageClass: hostpath
+  size: 5Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
+
+redis:
+  enabled: true
+  image:
+    repository: redis-7-alpine
+    tag: ""
+    pullPolicy: IfNotPresent
+  auth:
+    password: "redis-dev-pw-2026"
+  storageClass: hostpath
+  size: 2Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

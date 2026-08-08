@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "new-api.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "new-api.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.app.replicaCount }}
+  {{- end }}
+  strategy:
+    {{- toYaml .Values.app.strategy | nindent 4 }}
+  selector:
+    matchLabels:
+      {{- include "new-api.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "new-api.selectorLabels" . | nindent 8 }}
+        {{- with .Values.app.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        # Force rollout when config/secret changes.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.app.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- include "new-api.imagePullSecrets" . | nindent 6 }}
+      serviceAccountName: {{ include "new-api.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      {{- with .Values.app.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: new-api
+          image: {{ include "new-api.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.app.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "new-api.fullname" . }}-config
+            - secretRef:
+                name: {{ include "new-api.fullname" . }}-secret
+          ports:
+            - name: http
+              containerPort: {{ .Values.app.containerPort }}
+              protocol: TCP
+          {{- if .Values.app.startupProbe.enabled }}
+          startupProbe:
+            {{- omit .Values.app.startupProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          {{- if .Values.app.livenessProbe.enabled }}
+          livenessProbe:
+            {{- omit .Values.app.livenessProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          {{- if .Values.app.readinessProbe.enabled }}
+          readinessProbe:
+            {{- omit .Values.app.readinessProbe "enabled" | toYaml | nindent 12 }}
+          {{- end }}
+          {{- with .Values.app.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.app.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: logs
+              mountPath: /app/logs
+      volumes:
+        - name: data
+          {{- if .Values.persistence.data.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "new-api.fullname" . }}-data
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: logs
+          {{- if .Values.persistence.logs.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "new-api.fullname" . }}-logs
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+      {{- with .Values.app.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.app.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if or .Values.app.affinity .Values.app.podAntiAffinityPreset }}
+      affinity:
+        {{- if .Values.app.affinity }}
+        {{- toYaml .Values.app.affinity | nindent 8 }}
+        {{- end }}
+        {{- if .Values.app.podAntiAffinityPreset }}
+        podAntiAffinity:
+          {{- if eq .Values.app.podAntiAffinityPreset "soft" }}
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "new-api.selectorLabels" . | nindent 20 }}
+                topologyKey: kubernetes.io/hostname
+          {{- else if eq .Values.app.podAntiAffinityPreset "hard" }}
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  {{- include "new-api.selectorLabels" . | nindent 18 }}
+              topologyKey: kubernetes.io/hostname
+          {{- end }}
+        {{- end }}
+      {{- end }}

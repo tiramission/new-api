@@ -1,0 +1,8 @@
+{{- range .Values.extraObjects -}}
+---
+{{- if kindIs "string" . }}
+{{- . }}
+{{- else }}
+{{- toYaml . }}
+{{- end }}
+{{- end -}}

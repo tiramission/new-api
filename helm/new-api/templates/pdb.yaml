@@ -1,0 +1,19 @@
+{{- if and .Values.pdb.enabled (or (hasKey .Values.pdb "minAvailable") (hasKey .Values.pdb "maxUnavailable")) -}}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "new-api.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "new-api.labels" . | nindent 4 }}
+spec:
+  {{- if hasKey .Values.pdb "minAvailable" }}
+  minAvailable: {{ .Values.pdb.minAvailable }}
+  {{- end }}
+  {{- if hasKey .Values.pdb "maxUnavailable" }}
+  maxUnavailable: {{ .Values.pdb.maxUnavailable }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "new-api.selectorLabels" . | nindent 6 }}
+{{- end -}}

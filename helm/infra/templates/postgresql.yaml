@@ -1,0 +1,110 @@
+{{- if .Values.postgresql.enabled }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: infra-postgresql-secret
+  namespace: {{ .Release.Namespace }}
+type: Opaque
+stringData:
+  POSTGRES_PASSWORD: {{ .Values.postgresql.auth.password | quote }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: infra-postgresql
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: infra-postgresql
+spec:
+  type: ClusterIP
+  selector:
+    app: infra-postgresql
+  ports:
+    - name: postgresql
+      port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: infra-postgresql
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: infra-postgresql
+spec:
+  serviceName: infra-postgresql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: infra-postgresql
+  template:
+    metadata:
+      labels:
+        app: infra-postgresql
+    spec:
+      containers:
+        - name: postgresql
+          image: {{ include "infra.postgresImage" . }}
+          imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
+          ports:
+            - name: postgresql
+              containerPort: 5432
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: infra-postgresql-secret
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_USER
+              value: {{ .Values.postgresql.auth.username }}
+            - name: POSTGRES_DB
+              value: {{ .Values.postgresql.auth.database }}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+            - name: POSTGRES_HOST_AUTH_METHOD
+              value: scram-sha-256
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            {{- toYaml .Values.postgresql.resources | nindent 12 }}
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U {{ .Values.postgresql.auth.username }} -d {{ .Values.postgresql.auth.database }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U {{ .Values.postgresql.auth.username }} -d {{ .Values.postgresql.auth.database }}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: infra-postgresql-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: infra-postgresql-data
+  namespace: {{ .Release.Namespace }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  {{- with .Values.postgresql.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.postgresql.size }}
+{{- end }}

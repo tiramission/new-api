@@ -1,0 +1,14 @@
+# Patterns to ignore when packaging the chart.
+.idea/
+.vscode/
+.git/
+.gitignore
+.github/
+docs/
+*.tgz
+*.tar.gz
+*.swp
+*.bak
+*.orig
+*.log
+README.md.gotmpl

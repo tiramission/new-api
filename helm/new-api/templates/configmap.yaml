@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "new-api.fullname" . }}-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "new-api.labels" . | nindent 4 }}
+data:
+  TZ: {{ .Values.app.timezone | quote }}
+  NODE_NAME: {{ .Values.app.nodeName | quote }}
+  ERROR_LOG_ENABLED: "true"
+  BATCH_UPDATE_ENABLED: "true"
+  SQL_MAX_IDLE_CONNS: {{ .Values.database.maxIdleConns | quote }}
+  SQL_MAX_OPEN_CONNS: {{ .Values.database.maxOpenConns | quote }}
+  SQL_MAX_LIFETIME: {{ .Values.database.maxLifetime | quote }}
+  SQL_SLOW_THRESHOLD_MS: {{ .Values.database.slowThresholdMs | quote }}
+  {{- range $k, $v := .Values.extraEnv }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}

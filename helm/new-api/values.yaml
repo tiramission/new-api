@@ -1,0 +1,322 @@
+# ============================================================================
+# new-api Helm Chart — default values
+# ============================================================================
+# The chart is self-contained: PostgreSQL/MySQL and Redis ship as Bitnami
+# subcharts. Only one of postgresql / mysql should be enabled at a time;
+# the active one is wired into new-api via `database.type` and the
+# `SQL_DSN` template in templates/_helpers.tpl.
+# ============================================================================
+
+## @section Global
+##
+global:
+  # Optional image registry override applied to all images (subcharts included).
+  imageRegistry: ""
+  # Optional pull secrets applied to all images (subcharts included).
+  imagePullSecrets: []
+  # Optional storage class override applied to all PVCs (subcharts included).
+  storageClass: ""
+
+## @section new-api image
+##
+image:
+  registry: docker.io
+  repository: calciumion/new-api
+  tag: latest
+  digest: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+## @section new-api runtime
+##
+app:
+  # Number of replicas. Set >1 only when SESSION_SECRET is configured and a
+  # shared database/Redis is used, because session state is otherwise local.
+  replicaCount: 1
+
+  # Container port (matches Dockerfile EXPOSE).
+  containerPort: 3000
+
+  # Extra command-line args forwarded to the binary (e.g. "--log-dir /app/logs").
+  args: []
+
+  # Timezone.
+  timezone: Asia/Shanghai
+
+  # Node identity used in audit logs; recommend overriding per replica when
+  # running multiple instances.
+  nodeName: new-api-node-1
+
+  # Resource requests/limits. new-api is CPU-light but can spike under heavy
+  # relay traffic; keep memory headroom for in-flight stream buffers.
+  resources:
+    limits:
+      cpu: "2"
+      memory: 2Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+
+  # Health probes mirror the docker-compose healthcheck (/api/status).
+  livenessProbe:
+    enabled: true
+    httpGet:
+      path: /api/status
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readinessProbe:
+    enabled: true
+    httpGet:
+      path: /api/status
+      port: http
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  startupProbe:
+    enabled: false
+    httpGet:
+      path: /api/status
+      port: http
+    periodSeconds: 10
+    failureThreshold: 30
+
+  # Pod-level security context.
+  podSecurityContext:
+    runAsNonRoot: false
+    fsGroup: 0
+  containerSecurityContext:
+    runAsNonRoot: false
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+
+  # Update strategy.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  # Pod anti-affinity to spread replicas across nodes when replicaCount > 1.
+  podAntiAffinityPreset: ""  # "", "soft", "hard"
+
+  # Optional nodeSelector / tolerations / affinity (override above presets).
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+  # Optional extra pod labels / annotations.
+  podLabels: {}
+  podAnnotations: {}
+
+## @section Database (self-contained via subcharts)
+##
+database:
+  # Which bundled subchart to wire into SQL_DSN. One of: postgresql, mysql.
+  # Switching type also requires toggling the matching `*.enabled` below.
+  type: postgresql
+
+  # Schema/database name created by the subchart.
+  name: new-api
+
+  # Optional separate log database. When `logDatabase.enabled` is true a second
+  # database is created inside the same server and wired into LOG_SQL_DSN.
+  logDatabase:
+    enabled: false
+    name: new-api-log
+
+  # Connection pool tuning (forwarded as env vars to new-api).
+  maxIdleConns: 100
+  maxOpenConns: 1000
+  maxLifetime: 60
+  slowThresholdMs: 200
+
+## @section PostgreSQL subchart (Bitnami)
+## Disable when `database.type` is mysql.
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: "change-me-in-production"
+    username: newapi
+    password: "change-me-in-production"
+    database: new-api
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: ""
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+## @section MySQL subchart (Bitnami)
+## Enable only when `database.type` is mysql (and disable postgresql).
+mysql:
+  enabled: false
+  auth:
+    rootPassword: "change-me-in-production"
+    username: newapi
+    password: "change-me-in-production"
+    database: new-api
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: ""
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+## @section Redis subchart (Bitnami)
+## Used as cache + distributed state. Disable only when an external Redis is
+## configured via `redis.external`.
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: "change-me-in-production"
+  architecture: standalone
+  master:
+    persistence:
+      enabled: true
+      size: 8Gi
+      storageClass: ""
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  # Use an external Redis instead of the bundled subchart. When set, disable
+  # `redis.enabled` above and provide a full connection string here.
+  external:
+    enabled: false
+    connectionString: ""  # e.g. redis://:password@host:6379/0
+
+## @section External database (optional)
+## Use an external DB instead of the bundled subchart. When set, disable the
+## matching subchart (postgresql.enabled=false or mysql.enabled=false).
+externalDatabase:
+  enabled: false
+  # Full DSN. Examples:
+  #   PostgreSQL: postgresql://user:pass@host:5432/dbname
+  #   MySQL:      user:pass@tcp(host:3306)/dbname?parseTime=true
+  dsn: ""
+  # Optional separate log DSN.
+  logDsn: ""
+
+## @section Persistence for new-api container (/data, /app/logs)
+##
+persistence:
+  # /data — SQLite (when no DB configured), uploaded assets, runtime state.
+  data:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 10Gi
+    annotations: {}
+  # /app/logs — structured log files. Required when args include --log-dir /app/logs.
+  logs:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 10Gi
+    annotations: {}
+
+## @section Service
+##
+service:
+  type: ClusterIP
+  port: 3000
+  nodePort: ""
+  annotations: {}
+  clusterIP: ""
+  externalIPs: []
+  loadBalancerIP: ""
+  loadBalancerSourceRanges: []
+
+## @section Ingress
+##
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: new-api.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: new-api-tls
+  #    hosts:
+  #      - new-api.local
+
+## @section HorizontalPodAutoscaler
+##
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+## @section PodDisruptionBudget
+##
+pdb:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1
+
+## @section Service account
+##
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+  automountServiceAccountToken: false
+
+## @section new-api environment variables
+## Sensitive values go to Secret (see `extraSecretEnv`); non-sensitive to ConfigMap.
+##
+extraEnv: {}
+  # ERROR_LOG_ENABLED: "true"
+  # BATCH_UPDATE_ENABLED: "true"
+  # STREAMING_TIMEOUT: "300"
+  # RELAY_IDLE_CONN_TIMEOUT: "90"
+  # SYNC_FREQUENCY: "60"
+  # MEMORY_CACHE_ENABLED: "true"
+  # GENERATE_DEFAULT_TOKEN: "false"
+
+# Sensitive env vars rendered into a Secret.
+extraSecretEnv: {}
+  # SESSION_SECRET: "random-string-for-multi-node"
+  # SESSION_COOKIE_SECURE: "true"
+  # SESSION_COOKIE_TRUSTED_URL: "https://example.com"
+  # TRUSTED_PROXIES: "10.0.0.0/8"
+  # GOOGLE_ANALYTICS_ID: "G-XXXXXXXXXX"
+
+## @section NetworkPolicy
+##
+networkPolicy:
+  enabled: false
+  # When enabled, allow egress to anywhere by default. Tighten in production.
+  allowExternalEgress: true
+
+## @section Extra manifests
+## Render arbitrary extra objects (e.g. ExternalSecrets, PrometheusRule).
+extraObjects: []

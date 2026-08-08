@@ -1,0 +1,54 @@
+=======================================================================
+  new-api has been deployed!
+=======================================================================
+
+Release:      {{ .Release.Name }}
+Namespace:    {{ .Release.Namespace }}
+Image:        {{ include "new-api.image" . }}
+Replicas:     {{ .Values.app.replicaCount }}
+Database:     {{ if .Values.externalDatabase.enabled }}external{{ else }}{{ .Values.database.type }} (bundled){{ end }}
+Redis:        {{ if .Values.redis.external.enabled }}external{{ else if .Values.redis.enabled }}bundled{{ else }}disabled{{ end }}
+
+1. Wait for the rollout to finish:
+
+   kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ include "new-api.fullname" . }}
+
+2. Get the access URL:
+
+{{- if .Values.ingress.enabled }}
+{{- range .Values.ingress.hosts }}
+{{- $path := "/" }}
+{{- if .paths }}{{- $path = (first .paths).path | default "/" }}{{- end }}
+   Ingress:  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}{{ $path }}
+{{- end }}
+{{- else if eq .Values.service.type "LoadBalancer" }}
+   export NEW_API_IP=$(kubectl -n {{ .Release.Namespace }} get svc {{ include "new-api.fullname" . }} -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+   open "http://${NEW_API_IP}:{{ .Values.service.port }}"
+{{- else if eq .Values.service.type "NodePort" }}
+   export NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+   export NODE_PORT=$(kubectl -n {{ .Release.Namespace }} get svc {{ include "new-api.fullname" . }} -o jsonpath='{.spec.ports[0].nodePort}')
+   open "http://${NODE_IP}:${NODE_PORT}"
+{{- else }}
+   kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "new-api.fullname" . }} {{ .Values.service.port }}:{{ .Values.service.port }}
+   open "http://127.0.0.1:{{ .Values.service.port }}"
+{{- end }}
+
+3. Initial admin login:
+   - Default username: root
+   - Default password: 123456
+   CHANGE THE PASSWORD IMMEDIATELY after first login.
+
+=======================================================================
+  IMPORTANT — production checklist
+=======================================================================
+- Replace all default passwords:
+    postgresql.auth.postgresPassword / postgresql.auth.password
+    mysql.auth.rootPassword / mysql.auth.password
+    redis.auth.password
+- For multi-replica deployments (new-api.replicaCount > 1) you MUST set:
+    extraSecretEnv.SESSION_SECRET = "<random-string>"
+  and ensure a shared database + Redis is used (default).
+- Configure Ingress + TLS for HTTPS in front of the gateway.
+- Review resource requests/limits and PVC sizes for your workload.
+- (Optional) Point LOG_SQL_DSN at a separate database or ClickHouse for logs
+  by enabling database.logDatabase, or by setting externalDatabase.logDsn.
