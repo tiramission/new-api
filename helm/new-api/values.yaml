@@ -31,9 +31,11 @@ app:
   # Timezone.
   timezone: Asia/Shanghai
 
-  # Node identity used in audit logs; recommend overriding per replica when
-  # running multiple instances.
-  nodeName: new-api-node-1
+  # Instance identity written to audit logs as NODE_NAME. Empty (default):
+  # the StatefulSet pod name (new-api-0, new-api-1, ...) is injected via the
+  # downward API — unique per replica and stable across restarts. Set a static
+  # value only for single-replica or shared-identity setups.
+  nodeIdentity: ""
 
   # Resource requests/limits. new-api is CPU-light but can spike under heavy
   # relay traffic; keep memory headroom for in-flight stream buffers.
@@ -83,14 +85,8 @@ app:
       drop:
         - ALL
 
-  # Update strategy.
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
-
-  # Optional nodeSelector / tolerations for scheduling.
+  # Update strategy (StatefulSet RollingUpdate; replicaCount > 1 is safe).
+  # nodeSelector / tolerations for scheduling.
   nodeSelector: {}
   tolerations: []
 
@@ -125,6 +121,8 @@ redis:
   connectionString: ""  # e.g. redis://:password@host:6379/0
 
 ## @section Persistence
+## Volumes are provisioned per replica via StatefulSet volumeClaimTemplates
+## (<name>-data-0, <name>-logs-1, ...) so each pod gets its own storage.
 ## /data always persists (SQLite when no DB configured, uploaded assets, runtime
 ## state). /app/logs persists only when enabled (needs `app.args: ["--log-dir",
 ## "/app/logs"]`); otherwise it is an emptyDir.

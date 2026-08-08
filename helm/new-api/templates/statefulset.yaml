@@ -1,14 +1,15 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ include "new-api.fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
     {{- include "new-api.labels" . | nindent 4 }}
 spec:
+  serviceName: {{ include "new-api.fullname" . }}
   replicas: {{ .Values.app.replicaCount }}
-  strategy:
-    {{- toYaml .Values.app.strategy | nindent 4 }}
+  updateStrategy:
+    type: RollingUpdate
   selector:
     matchLabels:
       {{- include "new-api.selectorLabels" . | nindent 6 }}
@@ -39,6 +40,18 @@ spec:
                 name: {{ include "new-api.fullname" . }}-config
             - secretRef:
                 name: {{ include "new-api.fullname" . }}-secret
+          env:
+            - name: NODE_NAME
+              {{- if .Values.app.nodeIdentity }}
+              value: {{ .Values.app.nodeIdentity | quote }}
+              {{- else }}
+              # Stable per-replica identity: StatefulSet pod names (new-api-0,
+              # new-api-1, ...) are unique and survive restarts. Only set
+              # `app.nodeIdentity` for single-replica or shared-identity setups.
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+              {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.app.containerPort }}
@@ -69,20 +82,14 @@ spec:
             - name: logs
               mountPath: /app/logs
       volumes:
+        {{- if not .Values.persistence.data.enabled }}
         - name: data
-          {{- if .Values.persistence.data.enabled }}
-          persistentVolumeClaim:
-            claimName: {{ include "new-api.fullname" . }}-data
-          {{- else }}
           emptyDir: {}
-          {{- end }}
+        {{- end }}
+        {{- if not .Values.persistence.logs.enabled }}
         - name: logs
-          {{- if .Values.persistence.logs.enabled }}
-          persistentVolumeClaim:
-            claimName: {{ include "new-api.fullname" . }}-logs
-          {{- else }}
           emptyDir: {}
-          {{- end }}
+        {{- end }}
       {{- with .Values.app.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -91,3 +98,40 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+  {{- if or .Values.persistence.data.enabled .Values.persistence.logs.enabled }}
+  volumeClaimTemplates:
+    {{- if .Values.persistence.data.enabled }}
+    - metadata:
+        name: data
+        {{- with .Values.persistence.data.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          - {{ .Values.persistence.data.accessMode }}
+        {{- with .Values.persistence.data.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.data.size }}
+    {{- end }}
+    {{- if .Values.persistence.logs.enabled }}
+    - metadata:
+        name: logs
+        {{- with .Values.persistence.logs.annotations }}
+        annotations:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+      spec:
+        accessModes:
+          - {{ .Values.persistence.logs.accessMode }}
+        {{- with .Values.persistence.logs.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.logs.size }}
+    {{- end }}
+  {{- end }}

@@ -7,7 +7,6 @@ metadata:
     {{- include "new-api.labels" . | nindent 4 }}
 data:
   TZ: {{ .Values.app.timezone | quote }}
-  NODE_NAME: {{ .Values.app.nodeName | quote }}
   ERROR_LOG_ENABLED: "true"
   BATCH_UPDATE_ENABLED: "true"
   SQL_MAX_IDLE_CONNS: {{ .Values.database.maxIdleConns | quote }}

@@ -84,7 +84,7 @@ persistence:
 | `app.replicaCount` | `1` | Pod replicas (>1 requires `SESSION_SECRET`). |
 | `app.args` | `[]` | Extra args, e.g. `["--log-dir","/app/logs"]`. |
 | `app.timezone` | `Asia/Shanghai` | `TZ` env. |
-| `app.nodeName` | `new-api-node-1` | `NODE_NAME` for audit logs. |
+| `app.nodeIdentity` | `""` | `NODE_NAME` for audit logs; empty = StatefulSet pod name injected via downward API (unique per replica). |
 | `app.resources` | requests 250m/512Mi, limits 2/2Gi | Container resources. |
 | `app.livenessProbe` / `readinessProbe` / `startupProbe` | `/api/status` | Health probes. |
 | `app.nodeSelector` / `tolerations` | `{}` / `[]` | Pod scheduling. |
@@ -93,8 +93,8 @@ persistence:
 | `externalDatabase.logDsn` | `""` | Optional separate log DSN. |
 | `redis.enabled` | `true` | Use external Redis. |
 | `redis.connectionString` | `""` | Full `redis://` URL. |
-| `persistence.data` | 10Gi | PVC for `/data`. |
-| `persistence.logs` | disabled | PVC for `/app/logs` (enable with `--log-dir`). |
+| `persistence.data` | 10Gi | Per-replica PVC for `/data` (StatefulSet volumeClaimTemplates). |
+| `persistence.logs` | disabled | Per-replica PVC for `/app/logs` (enable with `--log-dir`). |
 | `service.type` / `port` | `ClusterIP` / `3000` | Service. |
 | `ingress.enabled` | `false` | Ingress. |
 | `extraEnv` / `extraSecretEnv` | `{}` | Extra env (ConfigMap / Secret). |

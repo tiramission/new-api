@@ -11,7 +11,7 @@ Redis:        {{ if .Values.redis.enabled }}{{ .Values.redis.connectionString }}
 
 1. Wait for the rollout to finish:
 
-   kubectl -n {{ .Release.Namespace }} rollout status deployment/{{ include "new-api.fullname" . }}
+   kubectl -n {{ .Release.Namespace }} rollout status statefulset/{{ include "new-api.fullname" . }}
 
 2. Get the access URL:
 
