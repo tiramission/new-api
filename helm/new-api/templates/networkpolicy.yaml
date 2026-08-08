@@ -18,7 +18,7 @@ spec:
     - {}
   egress:
     {{- if .Values.networkPolicy.allowExternalEgress }}
-    # Allow egress to anywhere (DNS, upstream AI providers, bundled DB/Redis).
+    # Allow egress to anywhere (DNS, upstream AI providers, external DB/Redis).
     - {}
     {{- else }}
     # DNS
@@ -29,38 +29,5 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # Bundled PostgreSQL
-    {{- if .Values.postgresql.enabled }}
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: postgresql
-              app.kubernetes.io/instance: {{ .Release.Name }}
-      ports:
-        - protocol: TCP
-          port: 5432
-    {{- end }}
-    # Bundled MySQL
-    {{- if .Values.mysql.enabled }}
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: mysql
-              app.kubernetes.io/instance: {{ .Release.Name }}
-      ports:
-        - protocol: TCP
-          port: 3306
-    {{- end }}
-    # Bundled Redis
-    {{- if .Values.redis.enabled }}
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: redis
-              app.kubernetes.io/instance: {{ .Release.Name }}
-      ports:
-        - protocol: TCP
-          port: 6379
-    {{- end }}
     {{- end }}
 {{- end -}}

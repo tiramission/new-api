@@ -6,8 +6,8 @@ Release:      {{ .Release.Name }}
 Namespace:    {{ .Release.Namespace }}
 Image:        {{ include "new-api.image" . }}
 Replicas:     {{ .Values.app.replicaCount }}
-Database:     {{ if .Values.externalDatabase.enabled }}external{{ else }}{{ .Values.database.type }} (bundled){{ end }}
-Redis:        {{ if .Values.redis.external.enabled }}external{{ else if .Values.redis.enabled }}bundled{{ else }}disabled{{ end }}
+Database:     external ({{ .Values.externalDatabase.dsn }})
+Redis:        {{ if .Values.redis.external.enabled }}external ({{ .Values.redis.external.connectionString }}){{ else }}disabled{{ end }}
 
 1. Wait for the rollout to finish:
 
@@ -41,14 +41,12 @@ Redis:        {{ if .Values.redis.external.enabled }}external{{ else if .Values.
 =======================================================================
   IMPORTANT — production checklist
 =======================================================================
-- Replace all default passwords:
-    postgresql.auth.postgresPassword / postgresql.auth.password
-    mysql.auth.rootPassword / mysql.auth.password
-    redis.auth.password
+- Replace all default passwords in your external database/Redis:
+    postgresql.auth.password / mysql.auth.password / redis.auth.password
 - For multi-replica deployments (new-api.replicaCount > 1) you MUST set:
     extraSecretEnv.SESSION_SECRET = "<random-string>"
-  and ensure a shared database + Redis is used (default).
+  and ensure a shared database + Redis is used.
 - Configure Ingress + TLS for HTTPS in front of the gateway.
 - Review resource requests/limits and PVC sizes for your workload.
 - (Optional) Point LOG_SQL_DSN at a separate database or ClickHouse for logs
-  by enabling database.logDatabase, or by setting externalDatabase.logDsn.
+  by setting externalDatabase.logDsn.

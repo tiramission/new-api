@@ -18,16 +18,7 @@ keywords:
   - llm
   - new-api
 icon: https://raw.githubusercontent.com/QuantumNous/new-api/main/web/public/logo.png
-dependencies:
-  - name: postgresql
-    version: 16.7.x
-    repository: https://charts.bitnami.com/bitnami
-    condition: postgresql.enabled
-  - name: mysql
-    version: 12.3.x
-    repository: https://charts.bitnami.com/bitnami
-    condition: mysql.enabled
-  - name: redis
-    version: 21.2.x
-    repository: https://charts.bitnami.com/bitnami
-    condition: redis.enabled
+# No bundled database/Redis dependencies. new-api connects to external
+# PostgreSQL/MySQL and Redis via `externalDatabase` and `redis.external`
+# (see values.yaml). Deploy them separately, e.g. with the helm/infra chart.
+dependencies: []

@@ -1,20 +1,20 @@
 # new-api Helm Chart
 
-Self-contained Helm chart for [new-api](https://github.com/QuantumNous/new-api), an AI API gateway/proxy that aggregates 40+ upstream AI providers behind a unified OpenAI-compatible API, with user management, billing, rate limiting, and an admin dashboard.
+Helm chart for [new-api](https://github.com/QuantumNous/new-api), an AI API gateway/proxy that aggregates 40+ upstream AI providers behind a unified OpenAI-compatible API, with user management, billing, rate limiting, and an admin dashboard.
 
-The chart ships PostgreSQL/MySQL and Redis as **Bitnami subcharts**, so a default install needs no external dependencies.
+This chart deploys the **new-api application only**. Database and Redis are **not bundled** — they must be provided externally via `externalDatabase` and `redis.external`. Deploy them separately, for example with the `helm/infra` chart (official PostgreSQL + Redis images mirrored to a private registry).
 
 ## Quick start
 
 ```bash
-# 1. Pull bundled dependencies (Bitnami postgresql / mysql / redis)
-helm dependency update ./helm/new-api
+# 1. Deploy the infra chart (PostgreSQL + Redis)
+helm install infra ./helm/infra --namespace new-api --create-namespace
 
-# 2. Install
+# 2. Install new-api, wiring the external services
 helm install my-release ./helm/new-api \
-  --namespace new-api --create-namespace \
-  --set postgresql.auth.password=$(openssl rand -hex 16) \
-  --set redis.auth.password=$(openssl rand -hex 16)
+  --namespace new-api \
+  --set externalDatabase.dsn="postgresql://newapi:pass@infra-postgresql:5432/new-api" \
+  --set redis.external.connectionString="redis://:pass@infra-redis:6379/0"
 
 # 3. Get the URL
 kubectl -n new-api port-forward svc/my-release-new-api 3000:3000
@@ -23,43 +23,11 @@ open http://127.0.0.1:3000
 
 First login: `root` / `123456` — **change the password immediately**.
 
-## Bundled dependencies
-
-| Subchart    | Default  | Wire env          | Disable via                |
-|-------------|----------|-------------------|----------------------------|
-| `postgresql`| enabled  | `SQL_DSN`         | `postgresql.enabled=false` |
-| `mysql`     | disabled | `SQL_DSN`         | `mysql.enabled=true` (+ disable postgresql) |
-| `redis`     | enabled  | `REDIS_CONN_STRING` | `redis.enabled=false`    |
-
-`SQL_DSN` and `REDIS_CONN_STRING` are auto-generated in `templates/_helpers.tpl` based on `database.type`, the subchart auth values, and the release name.
-
-## Choosing the database
-
-Default is PostgreSQL (bundled). To use MySQL instead:
-
-```yaml
-database:
-  type: mysql
-postgresql:
-  enabled: false
-mysql:
-  enabled: true
-  auth:
-    rootPassword: "<strong-password>"
-    username: newapi
-    password: "<strong-password>"
-    database: new-api
-```
-
 ## Using an external database / Redis
 
-Skip the bundled subcharts and supply DSNs directly:
+The chart requires an external database and, optionally, Redis:
 
 ```yaml
-postgresql:
-  enabled: false        # or mysql.enabled: false
-redis:
-  enabled: false
 externalDatabase:
   enabled: true
   dsn: "postgresql://user:pass@db.internal:5432/new-api"
@@ -70,17 +38,15 @@ redis:
     connectionString: "redis://:pass@cache.internal:6379/0"
 ```
 
+Both PostgreSQL and MySQL DSNs are supported:
+
+- PostgreSQL: `postgresql://user:pass@host:5432/dbname`
+- MySQL: `user:pass@tcp(host:3306)/dbname?parseTime=true`
+
 ## Production checklist
 
 ```yaml
-# 1) Strong, unique passwords
-postgresql:
-  auth:
-    postgresPassword: "<strong>"
-    password: "<strong>"
-redis:
-  auth:
-    password: "<strong>"
+# 1) Strong, unique passwords in the external database/Redis
 
 # 2) Multi-replica requires a shared SESSION_SECRET
 app:
@@ -134,14 +100,10 @@ pdb:
 | `app.resources` | requests 250m/512Mi, limits 2/2Gi | Container resources. |
 | `app.livenessProbe` / `readinessProbe` | `/api/status` | Health probes. |
 | `app.podAntiAffinityPreset` | `""` | `""` / `soft` / `hard`. |
-| `database.type` | `postgresql` | `postgresql` or `mysql`. |
-| `database.name` | `new-api` | Database name. |
-| `database.logDatabase.enabled` | `false` | Create a separate log DB → `LOG_SQL_DSN`. |
 | `database.maxIdleConns` etc. | `100/1000/60/200` | Connection pool tuning. |
-| `postgresql.*` / `mysql.*` / `redis.*` | see Bitnami | Subchart values. |
-| `externalDatabase.enabled` | `false` | Use external DB (skip subchart). |
+| `externalDatabase.enabled` | `true` | Must be true (no bundled DB). |
 | `externalDatabase.dsn` / `logDsn` | `""` | Full DSN(s). |
-| `redis.external.enabled` | `false` | Use external Redis. |
+| `redis.external.enabled` | `true` | Use external Redis. |
 | `redis.external.connectionString` | `""` | Full `redis://` URL. |
 | `persistence.data` / `logs` | 10Gi each | PVCs for `/data` and `/app/logs`. |
 | `service.type` / `port` | `ClusterIP` / `3000` | Service. |
@@ -156,12 +118,12 @@ pdb:
 
 ## Logs
 
-Enable `app.args: ["--log-dir","/app/logs"]` and keep `persistence.logs.enabled: true` to persist structured log files. For a dedicated log database, set `database.logDatabase.enabled: true` (creates `new-api-log` in the bundled server) or `externalDatabase.logDsn`.
+Enable `app.args: ["--log-dir","/app/logs"]` and keep `persistence.logs.enabled: true` to persist structured log files. For a dedicated log database, set `externalDatabase.logDsn`.
 
 ## Troubleshooting
 
-- **`helm dependency build` fails on `oci://registry-1.docker.io`** — network reachability to Docker Hub. Retry, or mirror Bitnami charts to a private OCI registry and adjust `Chart.yaml` `repository` fields.
-- **Pod crash-loops with `SQL_DSN` errors** — verify the subchart is enabled for the chosen `database.type` and credentials match.
+- **`helm template` fails with "externalDatabase.enabled must be true"** — the chart requires an external DSN; the bundled subcharts were removed.
+- **Pod crash-loops with `SQL_DSN` errors** — verify the external database is reachable and credentials in `externalDatabase.dsn` match.
 - **Multi-replica login flapping** — `SESSION_SECRET` must be set and identical across replicas.
 
 ## License

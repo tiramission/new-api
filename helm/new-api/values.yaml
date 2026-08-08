@@ -1,20 +1,19 @@
 # ============================================================================
 # new-api Helm Chart — default values
 # ============================================================================
-# The chart is self-contained: PostgreSQL/MySQL and Redis ship as Bitnami
-# subcharts. Only one of postgresql / mysql should be enabled at a time;
-# the active one is wired into new-api via `database.type` and the
-# `SQL_DSN` template in templates/_helpers.tpl.
+# This chart deploys the new-api application only. Database and Redis are NOT
+# bundled; they must be provided externally via `externalDatabase` and
+# `redis.external` (deploy them separately, e.g. with the helm/infra chart).
 # ============================================================================
 
 ## @section Global
 ##
 global:
-  # Optional image registry override applied to all images (subcharts included).
+  # Optional image registry override applied to all images.
   imageRegistry: ""
-  # Optional pull secrets applied to all images (subcharts included).
+  # Optional pull secrets applied to all images.
   imagePullSecrets: []
-  # Optional storage class override applied to all PVCs (subcharts included).
+  # Optional storage class override applied to all PVCs.
   storageClass: ""
 
 ## @section new-api image
@@ -114,111 +113,37 @@ app:
   podLabels: {}
   podAnnotations: {}
 
-## @section Database (self-contained via subcharts)
+## @section Database (external only)
 ##
 database:
-  # Which bundled subchart to wire into SQL_DSN. One of: postgresql, mysql.
-  # Switching type also requires toggling the matching `*.enabled` below.
-  type: postgresql
-
-  # Schema/database name created by the subchart.
-  name: new-api
-
-  # Optional separate log database. When `logDatabase.enabled` is true a second
-  # database is created inside the same server and wired into LOG_SQL_DSN.
-  logDatabase:
-    enabled: false
-    name: new-api-log
-
   # Connection pool tuning (forwarded as env vars to new-api).
   maxIdleConns: 100
   maxOpenConns: 1000
   maxLifetime: 60
   slowThresholdMs: 200
 
-## @section PostgreSQL subchart (Bitnami)
-## Disable when `database.type` is mysql.
-postgresql:
-  enabled: true
-  auth:
-    postgresPassword: "change-me-in-production"
-    username: newapi
-    password: "change-me-in-production"
-    database: new-api
-  primary:
-    persistence:
-      enabled: true
-      size: 20Gi
-      storageClass: ""
-    resources:
-      requests:
-        cpu: 250m
-        memory: 256Mi
-      limits:
-        cpu: "1"
-        memory: 1Gi
-
-## @section MySQL subchart (Bitnami)
-## Enable only when `database.type` is mysql (and disable postgresql).
-mysql:
-  enabled: false
-  auth:
-    rootPassword: "change-me-in-production"
-    username: newapi
-    password: "change-me-in-production"
-    database: new-api
-  primary:
-    persistence:
-      enabled: true
-      size: 20Gi
-      storageClass: ""
-    resources:
-      requests:
-        cpu: 250m
-        memory: 256Mi
-      limits:
-        cpu: "1"
-        memory: 1Gi
-
-## @section Redis subchart (Bitnami)
-## Used as cache + distributed state. Disable only when an external Redis is
-## configured via `redis.external`.
-redis:
-  enabled: true
-  auth:
-    enabled: true
-    password: "change-me-in-production"
-  architecture: standalone
-  master:
-    persistence:
-      enabled: true
-      size: 8Gi
-      storageClass: ""
-    resources:
-      requests:
-        cpu: 100m
-        memory: 128Mi
-      limits:
-        cpu: 500m
-        memory: 512Mi
-
-  # Use an external Redis instead of the bundled subchart. When set, disable
-  # `redis.enabled` above and provide a full connection string here.
-  external:
-    enabled: false
-    connectionString: ""  # e.g. redis://:password@host:6379/0
-
-## @section External database (optional)
-## Use an external DB instead of the bundled subchart. When set, disable the
-## matching subchart (postgresql.enabled=false or mysql.enabled=false).
+## @section External database (required)
+## The chart does not bundle a database server. Provide a full DSN to an
+## external PostgreSQL or MySQL instance, e.g. one deployed by the helm/infra
+## chart.
+##
 externalDatabase:
-  enabled: false
+  enabled: true
   # Full DSN. Examples:
   #   PostgreSQL: postgresql://user:pass@host:5432/dbname
   #   MySQL:      user:pass@tcp(host:3306)/dbname?parseTime=true
   dsn: ""
-  # Optional separate log DSN.
+  # Optional separate log DSN (e.g. a second database on the same server).
   logDsn: ""
+
+## @section Redis (external only)
+## The chart does not bundle Redis. Provide a full connection string when Redis
+## is used as cache/distributed state.
+##
+redis:
+  external:
+    enabled: true
+    connectionString: ""  # e.g. redis://:password@host:6379/0
 
 ## @section Persistence for new-api container (/data, /app/logs)
 ##

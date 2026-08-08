@@ -85,76 +85,34 @@ imagePullSecrets:
 {{- end -}}
 
 {{/*
-Database host name for the bundled subchart. Bitnami subcharts expose their
-primary service as `<release-name>-postgresql` / `<release-name>-mysql`.
-*/}}
-{{- define "new-api.databaseHost" -}}
-{{- if eq .Values.database.type "postgresql" -}}
-{{- printf "%s-postgresql" .Release.Name -}}
-{{- else if eq .Values.database.type "mysql" -}}
-{{- printf "%s-mysql" .Release.Name -}}
-{{- else -}}
-{{- fail (printf "Unsupported database.type %q (must be postgresql or mysql)" .Values.database.type) -}}
-{{- end -}}
-{{- end -}}
-
-{{/*
-Database port for the bundled subchart.
-*/}}
-{{- define "new-api.databasePort" -}}
-{{- if eq .Values.database.type "postgresql" -}}5432{{- else if eq .Values.database.type "mysql" -}}3306{{- end -}}
-{{- end -}}
-
-{{/*
-Database username/password resolved from the matching subchart.
-*/}}
-{{- define "new-api.databaseUser" -}}
-{{- if eq .Values.database.type "postgresql" -}}{{- .Values.postgresql.auth.username -}}{{- else if eq .Values.database.type "mysql" -}}{{- .Values.mysql.auth.username -}}{{- end -}}
-{{- end -}}
-
-{{- define "new-api.databasePassword" -}}
-{{- if eq .Values.database.type "postgresql" -}}{{- .Values.postgresql.auth.password -}}{{- else if eq .Values.database.type "mysql" -}}{{- .Values.mysql.auth.password -}}{{- end -}}
-{{- end -}}
-
-{{/*
-SQL_DSN. Uses external DSN when externalDatabase.enabled; otherwise builds a
-DSN pointing at the bundled subchart's service.
+SQL_DSN. Always sourced from the external database DSN.
   PostgreSQL: postgresql://user:pass@host:5432/dbname
   MySQL:      user:pass@tcp(host:3306)/dbname?parseTime=true
 */}}
 {{- define "new-api.sqlDsn" -}}
 {{- if .Values.externalDatabase.enabled -}}
 {{- .Values.externalDatabase.dsn -}}
-{{- else if eq .Values.database.type "postgresql" -}}
-{{- printf "postgresql://%s:%s@%s:%s/%s" (include "new-api.databaseUser" .) (include "new-api.databasePassword" .) (include "new-api.databaseHost" .) (include "new-api.databasePort" .) .Values.database.name -}}
-{{- else if eq .Values.database.type "mysql" -}}
-{{- printf "%s:%s@tcp(%s:%s)/%s?parseTime=true" (include "new-api.databaseUser" .) (include "new-api.databasePassword" .) (include "new-api.databaseHost" .) (include "new-api.databasePort" .) .Values.database.name -}}
+{{- else -}}
+{{- fail "externalDatabase.enabled must be true and externalDatabase.dsn must be set" -}}
 {{- end -}}
 {{- end -}}
 
 {{/*
-LOG_SQL_DSN. Built the same way as SQL_DSN but with the log database name.
-Only emitted when database.logDatabase.enabled is true.
+LOG_SQL_DSN. Optional separate log database on the same external server.
+Only emitted when externalDatabase.logDsn is non-empty.
 */}}
 {{- define "new-api.logSqlDsn" -}}
-{{- if .Values.externalDatabase.enabled -}}
 {{- .Values.externalDatabase.logDsn -}}
-{{- else if eq .Values.database.type "postgresql" -}}
-{{- printf "postgresql://%s:%s@%s:%s/%s" (include "new-api.databaseUser" .) (include "new-api.databasePassword" .) (include "new-api.databaseHost" .) (include "new-api.databasePort" .) .Values.database.logDatabase.name -}}
-{{- else if eq .Values.database.type "mysql" -}}
-{{- printf "%s:%s@tcp(%s:%s)/%s?parseTime=true" (include "new-api.databaseUser" .) (include "new-api.databasePassword" .) (include "new-api.databaseHost" .) (include "new-api.databasePort" .) .Values.database.logDatabase.name -}}
-{{- end -}}
 {{- end -}}
 
 {{/*
-REDIS_CONN_STRING. Uses external when configured; otherwise points at the
-bundled Redis subchart's master service with the configured password.
+REDIS_CONN_STRING. Always sourced from redis.external.connectionString.
 */}}
 {{- define "new-api.redisConnString" -}}
 {{- if .Values.redis.external.enabled -}}
 {{- .Values.redis.external.connectionString -}}
 {{- else -}}
-{{- printf "redis://:%s@%s-redis-master:6379" .Values.redis.auth.password .Release.Name -}}
+{{- fail "redis.external.enabled must be true and redis.external.connectionString must be set" -}}
 {{- end -}}
 {{- end -}}
 
