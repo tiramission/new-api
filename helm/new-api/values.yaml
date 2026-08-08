@@ -2,19 +2,8 @@
 # new-api Helm Chart — default values
 # ============================================================================
 # This chart deploys the new-api application only. Database and Redis are NOT
-# bundled; they must be provided externally via `externalDatabase` and
-# `redis.external` (deploy them separately, e.g. with the helm/infra chart).
+# bundled; provide them via `externalDatabase` and `redis`.
 # ============================================================================
-
-## @section Global
-##
-global:
-  # Optional image registry override applied to all images.
-  imageRegistry: ""
-  # Optional pull secrets applied to all images.
-  imagePullSecrets: []
-  # Optional storage class override applied to all PVCs.
-  storageClass: ""
 
 ## @section new-api image
 ##
@@ -101,17 +90,9 @@ app:
       maxSurge: 1
       maxUnavailable: 0
 
-  # Pod anti-affinity to spread replicas across nodes when replicaCount > 1.
-  podAntiAffinityPreset: ""  # "", "soft", "hard"
-
-  # Optional nodeSelector / tolerations / affinity (override above presets).
+  # Optional nodeSelector / tolerations for scheduling.
   nodeSelector: {}
   tolerations: []
-  affinity: {}
-
-  # Optional extra pod labels / annotations.
-  podLabels: {}
-  podAnnotations: {}
 
 ## @section Database (external only)
 ##
@@ -128,7 +109,6 @@ database:
 ## chart.
 ##
 externalDatabase:
-  enabled: true
   # Full DSN. Examples:
   #   PostgreSQL: postgresql://user:pass@host:5432/dbname
   #   MySQL:      user:pass@tcp(host:3306)/dbname?parseTime=true
@@ -141,23 +121,23 @@ externalDatabase:
 ## is used as cache/distributed state.
 ##
 redis:
-  external:
-    enabled: true
-    connectionString: ""  # e.g. redis://:password@host:6379/0
+  enabled: true
+  connectionString: ""  # e.g. redis://:password@host:6379/0
 
-## @section Persistence for new-api container (/data, /app/logs)
+## @section Persistence
+## /data always persists (SQLite when no DB configured, uploaded assets, runtime
+## state). /app/logs persists only when enabled (needs `app.args: ["--log-dir",
+## "/app/logs"]`); otherwise it is an emptyDir.
 ##
 persistence:
-  # /data — SQLite (when no DB configured), uploaded assets, runtime state.
   data:
     enabled: true
     storageClass: ""
     accessMode: ReadWriteOnce
     size: 10Gi
     annotations: {}
-  # /app/logs — structured log files. Required when args include --log-dir /app/logs.
   logs:
-    enabled: true
+    enabled: false
     storageClass: ""
     accessMode: ReadWriteOnce
     size: 10Gi
@@ -170,10 +150,6 @@ service:
   port: 3000
   nodePort: ""
   annotations: {}
-  clusterIP: ""
-  externalIPs: []
-  loadBalancerIP: ""
-  loadBalancerSourceRanges: []
 
 ## @section Ingress
 ##
@@ -190,30 +166,6 @@ ingress:
   #  - secretName: new-api-tls
   #    hosts:
   #      - new-api.local
-
-## @section HorizontalPodAutoscaler
-##
-autoscaling:
-  enabled: false
-  minReplicas: 1
-  maxReplicas: 5
-  targetCPUUtilizationPercentage: 80
-  targetMemoryUtilizationPercentage: 80
-
-## @section PodDisruptionBudget
-##
-pdb:
-  enabled: false
-  minAvailable: 1
-  # maxUnavailable: 1
-
-## @section Service account
-##
-serviceAccount:
-  create: true
-  name: ""
-  annotations: {}
-  automountServiceAccountToken: false
 
 ## @section new-api environment variables
 ## Sensitive values go to Secret (see `extraSecretEnv`); non-sensitive to ConfigMap.
@@ -234,14 +186,3 @@ extraSecretEnv: {}
   # SESSION_COOKIE_TRUSTED_URL: "https://example.com"
   # TRUSTED_PROXIES: "10.0.0.0/8"
   # GOOGLE_ANALYTICS_ID: "G-XXXXXXXXXX"
-
-## @section NetworkPolicy
-##
-networkPolicy:
-  enabled: false
-  # When enabled, allow egress to anywhere by default. Tighten in production.
-  allowExternalEgress: true
-
-## @section Extra manifests
-## Render arbitrary extra objects (e.g. ExternalSecrets, PrometheusRule).
-extraObjects: []

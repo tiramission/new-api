@@ -2,7 +2,7 @@
 
 Helm chart for [new-api](https://github.com/QuantumNous/new-api), an AI API gateway/proxy that aggregates 40+ upstream AI providers behind a unified OpenAI-compatible API, with user management, billing, rate limiting, and an admin dashboard.
 
-This chart deploys the **new-api application only**. Database and Redis are **not bundled** — they must be provided externally via `externalDatabase` and `redis.external`. Deploy them separately, for example with the `helm/infra` chart (official PostgreSQL + Redis images mirrored to a private registry).
+This chart deploys the **new-api application only**. Database and Redis are **not bundled** — they must be provided externally via `externalDatabase` and `redis`. Deploy them separately, for example with the `helm/infra` chart (official PostgreSQL + Redis images mirrored to a private registry).
 
 ## Quick start
 
@@ -14,7 +14,7 @@ helm install infra ./helm/infra --namespace new-api --create-namespace
 helm install my-release ./helm/new-api \
   --namespace new-api \
   --set externalDatabase.dsn="postgresql://newapi:pass@infra-postgresql:5432/new-api" \
-  --set redis.external.connectionString="redis://:pass@infra-redis:6379/0"
+  --set redis.connectionString="redis://:pass@infra-redis:6379/0"
 
 # 3. Get the URL
 kubectl -n new-api port-forward svc/my-release-new-api 3000:3000
@@ -29,13 +29,11 @@ The chart requires an external database and, optionally, Redis:
 
 ```yaml
 externalDatabase:
-  enabled: true
   dsn: "postgresql://user:pass@db.internal:5432/new-api"
   logDsn: "postgresql://user:pass@db.internal:5432/new-api-log"  # optional
 redis:
-  external:
-    enabled: true
-    connectionString: "redis://:pass@cache.internal:6379/0"
+  enabled: true
+  connectionString: "redis://:pass@cache.internal:6379/0"
 ```
 
 Both PostgreSQL and MySQL DSNs are supported:
@@ -46,9 +44,7 @@ Both PostgreSQL and MySQL DSNs are supported:
 ## Production checklist
 
 ```yaml
-# 1) Strong, unique passwords in the external database/Redis
-
-# 2) Multi-replica requires a shared SESSION_SECRET
+# 1) Multi-replica requires a shared SESSION_SECRET
 app:
   replicaCount: 2
 extraSecretEnv:
@@ -57,7 +53,7 @@ extraSecretEnv:
   SESSION_COOKIE_TRUSTED_URL: "https://new-api.example.com"
   TRUSTED_PROXIES: "10.0.0.0/8"
 
-# 3) TLS ingress
+# 2) TLS ingress
 ingress:
   enabled: true
   className: nginx
@@ -71,21 +67,13 @@ ingress:
       hosts:
         - new-api.example.com
 
-# 4) Sizing
+# 3) Sizing
 app:
   resources:
     requests: { cpu: 500m, memory: 1Gi }
     limits:   { cpu: "4",  memory: 4Gi }
 persistence:
   data: { size: 50Gi }
-  logs: { size: 50Gi }
-autoscaling:
-  enabled: true
-  minReplicas: 2
-  maxReplicas: 10
-pdb:
-  enabled: true
-  minAvailable: 1
 ```
 
 ## Configuration reference
@@ -98,31 +86,26 @@ pdb:
 | `app.timezone` | `Asia/Shanghai` | `TZ` env. |
 | `app.nodeName` | `new-api-node-1` | `NODE_NAME` for audit logs. |
 | `app.resources` | requests 250m/512Mi, limits 2/2Gi | Container resources. |
-| `app.livenessProbe` / `readinessProbe` | `/api/status` | Health probes. |
-| `app.podAntiAffinityPreset` | `""` | `""` / `soft` / `hard`. |
+| `app.livenessProbe` / `readinessProbe` / `startupProbe` | `/api/status` | Health probes. |
+| `app.nodeSelector` / `tolerations` | `{}` / `[]` | Pod scheduling. |
 | `database.maxIdleConns` etc. | `100/1000/60/200` | Connection pool tuning. |
-| `externalDatabase.enabled` | `true` | Must be true (no bundled DB). |
-| `externalDatabase.dsn` / `logDsn` | `""` | Full DSN(s). |
-| `redis.external.enabled` | `true` | Use external Redis. |
-| `redis.external.connectionString` | `""` | Full `redis://` URL. |
-| `persistence.data` / `logs` | 10Gi each | PVCs for `/data` and `/app/logs`. |
+| `externalDatabase.dsn` | `""` | Required full DSN. |
+| `externalDatabase.logDsn` | `""` | Optional separate log DSN. |
+| `redis.enabled` | `true` | Use external Redis. |
+| `redis.connectionString` | `""` | Full `redis://` URL. |
+| `persistence.data` | 10Gi | PVC for `/data`. |
+| `persistence.logs` | disabled | PVC for `/app/logs` (enable with `--log-dir`). |
 | `service.type` / `port` | `ClusterIP` / `3000` | Service. |
 | `ingress.enabled` | `false` | Ingress. |
-| `autoscaling.enabled` | `false` | HPA. |
-| `pdb.enabled` | `false` | PodDisruptionBudget. |
-| `serviceAccount.create` | `true` | Service account. |
-| `networkPolicy.enabled` | `false` | NetworkPolicy. |
 | `extraEnv` / `extraSecretEnv` | `{}` | Extra env (ConfigMap / Secret). |
-| `extraObjects` | `[]` | Render arbitrary extra manifests. |
-| `global.imageRegistry` / `storageClass` | `""` | Override for all images / PVCs. |
 
 ## Logs
 
-Enable `app.args: ["--log-dir","/app/logs"]` and keep `persistence.logs.enabled: true` to persist structured log files. For a dedicated log database, set `externalDatabase.logDsn`.
+Enable `app.args: ["--log-dir","/app/logs"]` and set `persistence.logs.enabled: true` to persist structured log files. For a dedicated log database, set `externalDatabase.logDsn`.
 
 ## Troubleshooting
 
-- **`helm template` fails with "externalDatabase.enabled must be true"** — the chart requires an external DSN; the bundled subcharts were removed.
+- **`helm template` fails with "externalDatabase.dsn is required"** — the chart requires an external DSN; the bundled subcharts were removed.
 - **Pod crash-loops with `SQL_DSN` errors** — verify the external database is reachable and credentials in `externalDatabase.dsn` match.
 - **Multi-replica login flapping** — `SESSION_SECRET` must be set and identical across replicas.
 

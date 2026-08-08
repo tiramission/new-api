@@ -1,80 +1,32 @@
 # ============================================================================
 # new-api deployment overrides — Docker Desktop single-node
+# Only values that differ from the chart defaults.
 # ============================================================================
 
 image:
   registry: registry.cn-hangzhou.aliyuncs.com
   repository: jaign-mirror/build
   tag: new-api-v1.0.0-rc.24
-  pullPolicy: IfNotPresent
-
-app:
-  replicaCount: 1
-  timezone: Asia/Shanghai
-  nodeName: new-api-node-1
-  resources:
-    limits:
-      cpu: "2"
-      memory: 2Gi
-    requests:
-      cpu: 250m
-      memory: 512Mi
-
-database:
-  maxIdleConns: 100
-  maxOpenConns: 1000
-  maxLifetime: 60
-  slowThresholdMs: 200
 
 redis:
-  external:
-    enabled: true
-    connectionString: "redis://:redis-dev-pw-2026@infra-redis:6379/0"
+  connectionString: "redis://:redis-dev-pw-2026@infra-redis:6379/0"
 
 externalDatabase:
-  enabled: true
   dsn: "postgresql://newapi:newapi-dev-pw-2026@infra-postgresql:5432/new-api"
-  logDsn: ""
 
 persistence:
   data:
-    enabled: true
     storageClass: hostpath
-    accessMode: ReadWriteOnce
     size: 5Gi
-  logs:
-    enabled: true
-    storageClass: hostpath
-    accessMode: ReadWriteOnce
-    size: 2Gi
-
-service:
-  type: ClusterIP
-  port: 3000
-  nodePort: ""
-  annotations: {}
 
 ingress:
   enabled: true
   className: higress
-  annotations: {}
   hosts:
     - host: new-api.k8s.local
       paths:
         - path: /
           pathType: Prefix
-  tls: []
 
-autoscaling:
-  enabled: false
-
-pdb:
-  enabled: false
-
-serviceAccount:
-  create: true
-  name: ""
-
-extraEnv: {}
 extraSecretEnv:
   SESSION_SECRET: "dev-only-session-secret-2026-0807"

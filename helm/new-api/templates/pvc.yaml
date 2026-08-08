@@ -1,4 +1,4 @@
-{{- if .Values.persistence.data.enabled -}}
+{{- if .Values.persistence.data.enabled }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -16,9 +16,8 @@ spec:
   resources:
     requests:
       storage: {{ .Values.persistence.data.size }}
-  {{- $dataStorageClass := include "new-api.storageClass" (dict "global" .Values.global "local" .Values.persistence.data) }}
-  {{- if $dataStorageClass }}
-  storageClassName: {{ $dataStorageClass }}
+  {{- with .Values.persistence.data.storageClass }}
+  storageClassName: {{ . }}
   {{- end }}
 {{- end }}
 {{- if .Values.persistence.logs.enabled }}
@@ -40,8 +39,7 @@ spec:
   resources:
     requests:
       storage: {{ .Values.persistence.logs.size }}
-  {{- $logsStorageClass := include "new-api.storageClass" (dict "global" .Values.global "local" .Values.persistence.logs) }}
-  {{- if $logsStorageClass }}
-  storageClassName: {{ $logsStorageClass }}
+  {{- with .Values.persistence.logs.storageClass }}
+  storageClassName: {{ . }}
   {{- end }}
 {{- end }}

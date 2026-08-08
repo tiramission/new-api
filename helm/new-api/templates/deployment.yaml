@@ -6,9 +6,7 @@ metadata:
   labels:
     {{- include "new-api.labels" . | nindent 4 }}
 spec:
-  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.app.replicaCount }}
-  {{- end }}
   strategy:
     {{- toYaml .Values.app.strategy | nindent 4 }}
   selector:
@@ -18,20 +16,12 @@ spec:
     metadata:
       labels:
         {{- include "new-api.selectorLabels" . | nindent 8 }}
-        {{- with .Values.app.podLabels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
       annotations:
         # Force rollout when config/secret changes.
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
         checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
-        {{- with .Values.app.podAnnotations }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
     spec:
       {{- include "new-api.imagePullSecrets" . | nindent 6 }}
-      serviceAccountName: {{ include "new-api.serviceAccountName" . }}
-      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
       {{- with .Values.app.podSecurityContext }}
       securityContext:
         {{- toYaml . | nindent 8 }}
@@ -100,28 +90,4 @@ spec:
       {{- with .Values.app.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- if or .Values.app.affinity .Values.app.podAntiAffinityPreset }}
-      affinity:
-        {{- if .Values.app.affinity }}
-        {{- toYaml .Values.app.affinity | nindent 8 }}
-        {{- end }}
-        {{- if .Values.app.podAntiAffinityPreset }}
-        podAntiAffinity:
-          {{- if eq .Values.app.podAntiAffinityPreset "soft" }}
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              podAffinityTerm:
-                labelSelector:
-                  matchLabels:
-                    {{- include "new-api.selectorLabels" . | nindent 20 }}
-                topologyKey: kubernetes.io/hostname
-          {{- else if eq .Values.app.podAntiAffinityPreset "hard" }}
-          requiredDuringSchedulingIgnoredDuringExecution:
-            - labelSelector:
-                matchLabels:
-                  {{- include "new-api.selectorLabels" . | nindent 18 }}
-              topologyKey: kubernetes.io/hostname
-          {{- end }}
-        {{- end }}
       {{- end }}
